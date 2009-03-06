@@ -1,10 +1,54 @@
 <?php
+/**
+ * 
+ *
+ * @author Lee Parker
+ * @copyright Copyright (c) 2009 Social Agency
+ * @license http://www.opensource.org/licenses/mit-license.php The MIT License
+ *
+ * The MIT License
+ *
+ * Copyright (c) 2009 Social Agency
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ **/
 
-class GvizDataTableException extends Exception
-{
-    
-}
-
+/**
+ * This class is the main class for building out a DataTable object and rendering
+ * that object as a JSON Response to a query from the Google Visualization API.
+ * 
+ * Here is an example of how to use the class.  This example builds out a DataTable
+ * with two columns and one row of data.  Then it turns it into a JSON Response and
+ * echos that out.
+ * <code>
+ * <?php
+ * include('gviz_api.php');
+ * $Gviz = new GvizDataTable($_GET['tqx'], $_GET['responseHandler']);
+ * $Gviz->addColumn('name', 'Name', 'string');
+ * $Gviz->addColumn('sales', 'Sales', 'number');
+ * $Row = new GVizDataTableRow();
+ * $Row->addCell('string', 'Bob');
+ * $Row->addCell('number', 1234.56);
+ * $Gviz->addRow($Row);
+ * echo $Gviz->toJsonResponse();
+ * </code>
+ **/
 class GvizDataTable
 {
     protected $_version = 0.5;
@@ -473,4 +517,7 @@ class GvizDataTableError extends GvizDataTableWarning
     }
 }
 
-?>
+class GvizDataTableException extends Exception
+{
+    
+}
