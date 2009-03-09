@@ -42,12 +42,14 @@
  * $Gviz = new GvizDataTable($_GET['tqx'], $_GET['responseHandler']);
  * $Gviz->addColumn('name', 'Name', 'string');
  * $Gviz->addColumn('sales', 'Sales', 'number');
- * $Row = new GVizDataTableRow();
- * $Row->addCell('string', 'Bob');
- * $Row->addCell('number', 1234.56);
- * $Gviz->addRow($Row);
+ * $rowId = $Gviz->newRow();
+ * $Gviz->addCell($rowId, 'name', 'Bob');
+ * $Gviz->addCell($rowId, 'sales', 1234.56);
  * echo $Gviz->toJsonResponse();
  * </code>
+ *
+ * Note: The patterns expected by the column class are proper syntax for PHP's date 
+ * function. These patterns will not be in the response when the object is rendered.
  **/
 class GvizDataTable
 {
@@ -60,6 +62,7 @@ class GvizDataTable
     protected $_warnings = array();
     protected $_columns = array();
     protected $_rows = array();
+    protected $_lastNewRow = null;
     
     public function __construct($tqx = '', $responseHandler = '')
     {
@@ -90,10 +93,6 @@ class GvizDataTable
     
     public function getColumnType($id)
     {
-        if(isset($this->_columns[$id]) && is_a($this->_columns[$id], 'GvizDataTableColumn'))
-            return $this->_columns[$id]->getType();
-        else
-            throw new GvizDataTableException("Column id, $id, not found");
     }
     
     public function addWarning($reason, $message = '', $detailed_message = '')
@@ -108,12 +107,37 @@ class GvizDataTable
         $this->_status = 'error';
     }
     
-    public function addRow(GvizDataTableRow $row)
+    public function newRow()
     {
-        $this->_rows[] = $row;
+        if(is_null($this->_lastNewRow))
+        {
+            $id = 0;
+        }
+        else
+        {
+            $id = $this->_lastNewRow + 1;
+        }
+        $row = new GvizDataTableRow();
+        $this->_rows[$id] = $row;
+        
+        $this->_lastNewRow = $id;
+        return $id;
     }
 
-    protected function _arrayToJson($arrayName, $jsonName = '')
+    public function addCell($rowId, $colId, $value, $formatted = '')
+    {
+        if(!isset($this->_rows[$rowId]) || !is_a($this->_rows[$rowId], 'GvizDataTableRow'))
+            throw new GvizDataTableException("Row id, $rowId, not found");
+
+        if(!isset($this->_columns[$colId]) || !is_a($this->_columns[$colId], 'GvizDataTableColumn'))
+            throw new GvizDataTableException("Column id, $colId, not found");
+
+        $type = $this->_columns[$colId]->getType();
+        $pattern = $this->_columns[$colId]->getPattern();
+        $this->_rows[$rowId]->addCell($colId, $type, $value, $formatted, $pattern);
+    }
+    
+    protected function _arrayToJson($arrayName, $jsonName = '', $order = array())
     {
         $arrayName = ltrim($arrayName, '_');
         if(empty($jsonName))
@@ -129,7 +153,7 @@ class GvizDataTable
         $jsonItems = array();
         foreach($this->$arrayName as $item)
         {
-            $jsonItems[] = $item->toJson();
+            $jsonItems[] = $item->toJson($order);
         }
         $itemsInner = implode(',', $jsonItems);
         
@@ -142,7 +166,8 @@ class GvizDataTable
     {
         $table = array();
         $table[] = $this->_arrayToJson('columns', 'cols');
-        $table[] = $this->_arrayToJson('rows');
+        $columnOrder = array_keys($this->_columns);
+        $table[] = $this->_arrayToJson('rows', 'rows', $columnOrder);
         $tableInner = implode(',', $table);
         $json = sprintf('table: {%s}', $tableInner);
         return $json;
@@ -219,16 +244,17 @@ class GvizDataTableColumn
         return $this->_type;
     }
     
-    public function toJson()
+    public function getPattern()
+    {
+        return $this->_pattern;
+    }
+    
+    public function toJson($order = array())
     {
         $column = array();
         $column[] = "id: '{$this->_id}'";
         $column[] = "label: '{$this->_label}'";
         $column[] = "type: '{$this->_type}'";
-        if(!empty($this->_pattern))
-        {
-            $column[] = "pattern: '{$this->_pattern}'";
-        }
         $columnInner = implode(',', $column);
         $json = sprintf('{%s}', $columnInner);
         
@@ -246,18 +272,29 @@ class GvizDataTableRow
 {
     protected $_cells = array();
     
-    public function addCell($type, $value, $formatted)
+    public function addCell($colId, $type, $value, $formatted = '', $pattern = '')
     {
-        $this->_cells[] = GvizDataTableCell::factory($type, $value, $formatted);
+        $this->_cells[$colId] = GvizDataTableCell::factory($type, $value, $formatted, $pattern);
     }
     
-    public function toJson()
+    public function toJson($order = array())
     {
         $row = array();
-        foreach($this->_cells as $cell)
+        if(!empty($order))
         {
-            $row[] = $cell->toJson();
+            foreach($order as $column)
+            {
+                $row[] = $this->_cells[$column]->toJson();
+            }
         }
+        else
+        {
+            foreach($this->_cells as $cell)
+            {
+                $row[] = $cell->toJson();
+            }
+        }
+        
         $rowInner = implode(',', $row);
         $json = sprintf('{c:[%s]}', $rowInner);
         
@@ -270,13 +307,13 @@ class GvizDataTableCell
     protected $_value;
     protected $_formatted = '';
     
-    public function __construct($value, $formatted = '')
+    public function __construct($value, $formatted = '', $pattern = '')
     {
         $this->_value = $value;
         $this->_formatted = $formatted;
     }
     
-    public static function factory($type, $value, $formatted = '')
+    public static function factory($type, $value, $formatted = '', $pattern = '')
     {
         $type = strtolower($type);
         $class = "GvizDataTable" . ucfirst($type) . "Cell";
@@ -289,7 +326,7 @@ class GvizDataTableCell
         {
             $class = 'GvizDataTableEmptyCell';
         }
-        return new $class($value, $formatted);
+        return new $class($value, $formatted, $pattern);
     }
     
     public function toJson()
@@ -318,7 +355,7 @@ class GvizDataTableEmptyCell
 
 class GvizDataTableBooleanCell extends GvizDataTableCell
 {
-    public function __construct($value, $formatted = '')
+    public function __construct($value, $formatted = '', $pattern = '')
     {
         $possibleFalses = array('false', '0', 0, FALSE, '', NULL);
         $value = strtolower($value);
@@ -360,10 +397,31 @@ class GvizDataTableStringCell extends GvizDataTableCell
 
 class GvizDataTableDatetimeCell extends GvizDataTableCell
 {
+    public function __construct($value, $formatted = '', $pattern = '')
+    {
+        if(!is_numeric($value))
+        {
+            $this->_value = strtotime($value);
+        }
+        else
+        {
+            $this->_value = $value;
+        }
+        
+        if(empty($formatted) && !empty($pattern))
+        {
+            $this->_formatted = date($pattern, $this->_value);
+        }
+        else
+        {
+            $this->_formatted = $formatted;
+        }
+    }
+    
     public function toJson()
     {
         $cell = array();
-        $date = $this->_getDateParts($this->_value);
+        $date = $this->_getDateParts();
         $cell[] = sprintf("v: new Date(%d, %d, %d, %d, %d, %d)",
             $date['year'],
             ($date['month'] - 1), //JS uses 0-11 for month
@@ -383,15 +441,14 @@ class GvizDataTableDatetimeCell extends GvizDataTableCell
         return $json;
     }
     
-    protected function _getDateParts($date)
+    protected function _getDateParts()
     {
-        if(!is_numeric($date)) $date = strtotime($date);
-        $month = (int) strftime("%m", $date);
-        $day = (int) strftime("%d", $date);
-        $year = (int) strftime("%Y", $date);
-        $hour = (int) strftime("%H", $date);
-        $minute = (int) strftime("%M", $date);
-        $second = (int) strftime("%S", $date);
+        $month = (int) date("m", $this->_value);
+        $day = (int) date("d", $this->_value);
+        $year = (int) date("Y", $this->_value);
+        $hour = (int) date("H", $this->_value);
+        $minute = (int) date("i", $this->_value);
+        $second = (int) date("s", $this->_value);
         return compact('month', 'day', 'year', 'hour', 'minute', 'second');
     }
 }
@@ -401,7 +458,7 @@ class GvizDataTableDateCell extends GvizDataTableDatetimeCell
     public function toJson()
     {
         $cell = array();
-        $date = $this->_getDateParts($this->_value);
+        $date = $this->_getDateParts();
         $cell[] = sprintf("v: new Date(%d, %d, %d)",
             $date['year'],
             ($date['month'] - 1),
@@ -424,7 +481,7 @@ class GvizDataTableTimeofdayCell extends GvizDataTableDatetimeCell
     public function toJson()
     {
         $cell = array();
-        $date = $this->_getDateParts($this->_value);
+        $date = $this->_getDateParts();
         $cell[] = sprintf("v: [%d, %d, %d])",
             $date['hour'],
             $date['minute'],
@@ -467,7 +524,7 @@ class GvizDataTableWarning
         $this->_detailed_message = $detailed_message;
     }
     
-    public function toJson()
+    public function toJson($order = array())
     {
         $items = array();
         $items[] = "reason:'{$this->_reason}'";
