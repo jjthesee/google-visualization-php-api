@@ -89,10 +89,7 @@ class GvizDataTable
     public function addColumn($id, $label = '', $type = '', $pattern = '')
     {
         $this->_columns[$id] = new GvizDataTableColumn($id, $label, $type, $pattern);
-    }
-    
-    public function getColumnType($id)
-    {
+        return $id;
     }
     
     public function addWarning($reason, $message = '', $detailed_message = '')
@@ -284,7 +281,8 @@ class GvizDataTableRow
         {
             foreach($order as $column)
             {
-                $row[] = $this->_cells[$column]->toJson();
+                if(is_a($this->_cells[$column], 'GvizDataTableCell'))
+                    $row[] = $this->_cells[$column]->toJson();
             }
         }
         else
@@ -322,7 +320,7 @@ class GvizDataTableCell
             throw new GvizDataTableException("Type, $type, not supported by this api");
         }
         
-        if(empty($value))
+        if($value === '')
         {
             $class = 'GvizDataTableEmptyCell';
         }
